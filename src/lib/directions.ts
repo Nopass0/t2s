@@ -1,0 +1,16 @@
+export const defaultDirections = [
+  { key: "GI", title: "GI, шт", unit: "PIECES" },
+  { key: "FTP", title: "ФТП, шт", unit: "PIECES" },
+  { key: "MNP", title: "MNP портации, шт", unit: "PIECES" },
+  { key: "GOLD", title: "Золотые номера, шт", unit: "PIECES" },
+  { key: "SUBS", title: "Абонементы, шт", unit: "PIECES" },
+  { key: "HOME", title: "Домашний интернет/РТК, шт", unit: "PIECES" },
+  { key: "CLAIM", title: "Заявки на кредит, шт", unit: "PIECES" },
+  { key: "INSURANCE", title: "Страхование, руб", unit: "MONEY" },
+  { key: "SMART4G", title: "Смартфоны 4G, руб", unit: "MONEY" },
+  { key: "ACCESS", title: "Аксессуары, руб", unit: "MONEY" },
+  { key: "SETUP", title: "Настройки, руб", unit: "MONEY" },
+  { key: "EQUIP", title: "Оборудование РТК, руб", unit: "MONEY" },
+  { key: "ACTIV", title: "Активация ВН, шт", unit: "PIECES" },
+  { key: "CREDIT", title: "Кредиты, руб", unit: "MONEY" },
+] as const;

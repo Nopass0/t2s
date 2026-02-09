@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+enum UserRole {
+  ADMIN
+  DM
+  EMPLOYEE
+  INTERN
+}
+
+enum MetricUnit {
+  PIECES
+  MONEY
+}
+
+model Point {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  address   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  shifts       Shift[]
+  pointPlans   PointPlan[]
+  employeePlan EmployeePlan[]
+  sales        DailySale[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  role         UserRole
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  pointId      String?
+  penaltyCount Int      @default(0)
+
+  point         Point?            @relation(fields: [pointId], references: [id])
+  openedShifts  Shift[]           @relation("ShiftOpenedBy")
+  closedShifts  Shift[]           @relation("ShiftClosedBy")
+  assignments   ShiftAssignment[]
+  sales         DailySale[]
+  employeePlans EmployeePlan[]
+
+  @@index([pointId])
+  @@index([role])
+}
+
+model Direction {
+  id        String     @id @default(cuid())
+  key       String     @unique
+  title     String
+  unit      MetricUnit
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  pointPlans    PointPlan[]
+  personalGoals PersonalPlanGoal[]
+  sales         DailySale[]
+}
+
+model PointPlan {
+  id          String   @id @default(cuid())
+  pointId     String
+  directionId String
+  monthStart  DateTime
+  target      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  point     Point     @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  direction Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
+
+  @@unique([pointId, directionId, monthStart])
+  @@index([pointId, monthStart])
+}
+
+model EmployeePlan {
+  id         String   @id @default(cuid())
+  pointId    String
+  employeeId String
+  monthStart DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  point    Point              @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  employee User               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  goals    PersonalPlanGoal[]
+
+  @@unique([employeeId, monthStart])
+  @@index([pointId, monthStart])
+}
+
+model PersonalPlanGoal {
+  id             String  @id @default(cuid())
+  employeePlanId String
+  directionId    String
+  target         Int
+  isPriority     Boolean @default(false)
+
+  employeePlan EmployeePlan @relation(fields: [employeePlanId], references: [id], onDelete: Cascade)
+  direction    Direction    @relation(fields: [directionId], references: [id], onDelete: Cascade)
+
+  @@unique([employeePlanId, directionId])
+}
+
+model Shift {
+  id        String   @id @default(cuid())
+  pointId   String
+  workDate  DateTime
+  openById  String?
+  closeById String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  point       Point             @relation(fields: [pointId], references: [id], onDelete: Cascade)
+  openBy      User?             @relation("ShiftOpenedBy", fields: [openById], references: [id], onDelete: SetNull)
+  closeBy     User?             @relation("ShiftClosedBy", fields: [closeById], references: [id], onDelete: SetNull)
+  assignments ShiftAssignment[]
+
+  @@unique([pointId, workDate])
+  @@index([pointId, workDate])
+}
+
+model ShiftAssignment {
+  id      String  @id @default(cuid())
+  shiftId String
+  userId  String
+  hours   Int
+  isOpen  Boolean @default(false)
+  isClose Boolean @default(false)
+
+  shift Shift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, userId])
+  @@index([userId])
+}
+
+model DailySale {
+  id          String   @id @default(cuid())
+  userId      String
+  pointId     String
+  directionId String
+  saleDate    DateTime
+  quantity    Int?
+  amount      Float?
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  direction Direction @relation(fields: [directionId], references: [id], onDelete: Cascade)
+  point     Point     @relation(fields: [pointId], references: [id], onDelete: Cascade)
+
+  @@index([userId, saleDate])
+  @@index([pointId, saleDate])
+}
