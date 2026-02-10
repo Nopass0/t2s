@@ -136,48 +136,16 @@ export default function DmPage() {
         throw new Error(json.error ?? "Не удалось загрузить кабинет ДМ");
       }
 
-      const planByEmployeeId = new Map(
-        json.data.employeePlans.map((plan) => [plan.employeeId, plan]),
-      );
-      const employeePlanEmployees = json.data.people.filter(
-        (person) => person.role !== "DM",
-      );
-      const normalizedEmployeePlans = employeePlanEmployees.map((employee) => {
-        const existingPlan = planByEmployeeId.get(employee.id);
-
-        if (existingPlan) {
-          return existingPlan;
-        }
-
-        return {
-          employeeId: employee.id,
-          employeeName: employee.name,
-          goals: json.data.directions.map((direction) => ({
-            directionId: direction.id,
-            title: direction.title,
-            target: 0,
-            isPriority: false,
-            fact: 0,
-            progress: 0,
-          })),
-        };
-      });
-
-      const normalizedData = {
-        ...json.data,
-        employeePlans: normalizedEmployeePlans,
-      };
-
-      setData(normalizedData);
+      setData(json.data);
       setSelectedEmployeeId((prev) => {
         if (
           prev &&
-          normalizedEmployeePlans.some((plan) => plan.employeeId === prev)
+          json.data.employeePlans.some((plan) => plan.employeeId === prev)
         ) {
           return prev;
         }
 
-        return normalizedEmployeePlans[0]?.employeeId ?? "";
+        return json.data.employeePlans[0]?.employeeId ?? "";
       });
     } catch (err) {
       setError(
