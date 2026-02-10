@@ -133,9 +133,16 @@ export default function DmPage() {
       }
 
       setData(json.data);
-      if (!selectedEmployeeId) {
-        setSelectedEmployeeId(json.data.employeePlans[0]?.employeeId ?? "");
-      }
+      setSelectedEmployeeId((prev) => {
+        if (
+          prev &&
+          json.data.employeePlans.some((plan) => plan.employeeId === prev)
+        ) {
+          return prev;
+        }
+
+        return json.data.employeePlans[0]?.employeeId ?? "";
+      });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Не удалось загрузить кабинет ДМ",
