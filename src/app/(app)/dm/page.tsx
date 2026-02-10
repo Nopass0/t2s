@@ -61,6 +61,10 @@ type DmResponse = {
       fact: number;
       forecast: number;
     }>;
+    directions: Array<{
+      id: string;
+      title: string;
+    }>;
     employeePlans: Array<{
       employeeId: string;
       employeeName: string;
@@ -132,10 +136,49 @@ export default function DmPage() {
         throw new Error(json.error ?? "Не удалось загрузить кабинет ДМ");
       }
 
-      setData(json.data);
-      if (!selectedEmployeeId) {
-        setSelectedEmployeeId(json.data.employeePlans[0]?.employeeId ?? "");
-      }
+      const planByEmployeeId = new Map(
+        json.data.employeePlans.map((plan) => [plan.employeeId, plan]),
+      );
+      const employeePlanEmployees = json.data.people.filter(
+        (person) => person.role !== "DM",
+      );
+      const normalizedEmployeePlans = employeePlanEmployees.map((employee) => {
+        const existingPlan = planByEmployeeId.get(employee.id);
+
+        if (existingPlan) {
+          return existingPlan;
+        }
+
+        return {
+          employeeId: employee.id,
+          employeeName: employee.name,
+          goals: json.data.directions.map((direction) => ({
+            directionId: direction.id,
+            title: direction.title,
+            target: 0,
+            isPriority: false,
+            fact: 0,
+            progress: 0,
+          })),
+        };
+      });
+
+      const normalizedData = {
+        ...json.data,
+        employeePlans: normalizedEmployeePlans,
+      };
+
+      setData(normalizedData);
+      setSelectedEmployeeId((prev) => {
+        if (
+          prev &&
+          normalizedEmployeePlans.some((plan) => plan.employeeId === prev)
+        ) {
+          return prev;
+        }
+
+        return normalizedEmployeePlans[0]?.employeeId ?? "";
+      });
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Не удалось загрузить кабинет ДМ",
