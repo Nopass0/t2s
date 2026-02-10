@@ -61,6 +61,10 @@ type DmResponse = {
       fact: number;
       forecast: number;
     }>;
+    directions: Array<{
+      id: string;
+      title: string;
+    }>;
     employeePlans: Array<{
       employeeId: string;
       employeeName: string;
