@@ -169,43 +169,71 @@ export default function DmPage() {
 
   const saveSchedule = async () => {
     if (!data) return;
+
     setSaving(true);
-    await fetch("/api/dm/schedule", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pointId: data.point.id,
-        monthStart,
-        rows: data.scheduleRows.flatMap((row) =>
-          row.days.map((day) => ({
-            employeeId: row.employeeId,
-            date: day.date,
-            hours: day.hours,
-          })),
-        ),
-      }),
-    });
-    setScheduleDirty(false);
-    setSaving(false);
+    setError("");
+    try {
+      const res = await fetch("/api/dm/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pointId: data.point.id,
+          monthStart,
+          rows: data.scheduleRows.flatMap((row) =>
+            row.days.map((day) => ({
+              employeeId: row.employeeId,
+              date: day.date,
+              hours: day.hours,
+            })),
+          ),
+        }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error ?? "Не удалось сохранить график");
+      }
+
+      setScheduleDirty(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось сохранить график");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const savePointPlan = async () => {
     if (!data) return;
+
     setSaving(true);
-    await fetch("/api/dm/point-plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pointId: data.point.id,
-        monthStart,
-        items: data.directionRows.map((row) => ({
-          directionId: row.directionId,
-          target: row.plan,
-        })),
-      }),
-    });
-    setPointPlanDirty(false);
-    setSaving(false);
+    setError("");
+    try {
+      const res = await fetch("/api/dm/point-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pointId: data.point.id,
+          monthStart,
+          items: data.directionRows.map((row) => ({
+            directionId: row.directionId,
+            target: row.plan,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error ?? "Не удалось сохранить план точки");
+      }
+
+      setPointPlanDirty(false);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Не удалось сохранить план точки",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveEmployeePlan = async () => {
@@ -216,22 +244,36 @@ export default function DmPage() {
     if (!selected) return;
 
     setSaving(true);
-    await fetch("/api/dm/employee-plan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        pointId: data.point.id,
-        employeeId: selectedEmployeeId,
-        monthStart,
-        items: selected.goals.map((goal) => ({
-          directionId: goal.directionId,
-          target: goal.target,
-          isPriority: goal.isPriority,
-        })),
-      }),
-    });
-    setEmployeePlanDirty(false);
-    setSaving(false);
+    setError("");
+    try {
+      const res = await fetch("/api/dm/employee-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pointId: data.point.id,
+          employeeId: selectedEmployeeId,
+          monthStart,
+          items: selected.goals.map((goal) => ({
+            directionId: goal.directionId,
+            target: goal.target,
+            isPriority: goal.isPriority,
+          })),
+        }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error ?? "Не удалось сохранить личный план");
+      }
+
+      setEmployeePlanDirty(false);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Не удалось сохранить личный план",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const addStaff = async () => {
@@ -409,6 +451,11 @@ export default function DmPage() {
         },
       ]}
     >
+      {error ? (
+        <div className="mb-4 rounded-md border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : null}
       <Tabs value={tab} onValueChange={(value) => setTab(value as DmTab)}>
         <TabsContent value="schedule">
           <Card className="rounded-lg bg-[#1c1c1c]">
