@@ -464,6 +464,33 @@ export const getDmDashboard = async (
     };
   });
 
+  const employeePlansNormalized = employees.map((employee) => {
+    const plan = employeePlanById.get(employee.id);
+    const goalsByDirectionId = new Map(
+      (plan?.goals ?? []).map((goal) => [goal.directionId, goal]),
+    );
+
+    return {
+      employeeId: employee.id,
+      employeeName: employee.name,
+      goals: directions.map((direction) => {
+        const goal = goalsByDirectionId.get(direction.id);
+        const fact =
+          employeeFactByDirectionId.get(employee.id)?.get(direction.id) ?? 0;
+        const target = goal?.target ?? 0;
+
+        return {
+          fact,
+          progress: target > 0 ? Math.round((fact / target) * 100) : 0,
+          directionId: direction.id,
+          title: direction.title,
+          target,
+          isPriority: goal?.isPriority ?? false,
+        };
+      }),
+    };
+  });
+
   return {
     monthStart: toIsoDate(monthStart),
     point: {
@@ -480,27 +507,7 @@ export const getDmDashboard = async (
     })),
     directionRows,
     pointPlans,
-    employeePlans: employeePlans.map((plan) => ({
-      employeeId: plan.employeeId,
-      employeeName: plan.employee.name,
-      goals: plan.goals.map((goal) => ({
-        fact:
-          employeeFactByDirectionId
-            .get(plan.employeeId)
-            ?.get(goal.directionId) ?? 0,
-        progress: (() => {
-          const fact =
-            employeeFactByDirectionId
-              .get(plan.employeeId)
-              ?.get(goal.directionId) ?? 0;
-          return goal.target > 0 ? Math.round((fact / goal.target) * 100) : 0;
-        })(),
-        directionId: goal.directionId,
-        title: goal.direction.title,
-        target: goal.target,
-        isPriority: goal.isPriority,
-      })),
-    })),
+    employeePlans: employeePlansNormalized,
     people,
     dayColumns: dayKeys,
     scheduleRows,
