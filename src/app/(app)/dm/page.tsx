@@ -13,7 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/dashboard/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -29,12 +29,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { fromIsoDate, toIsoDate, toMonthStart } from "@/lib/date";
 import { downloadCsv } from "@/lib/export";
@@ -109,17 +106,14 @@ export default function DmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [scheduleDirty, setScheduleDirty] = useState(false);
+  const [pointPlanDirty, setPointPlanDirty] = useState(false);
+  const [employeePlanDirty, setEmployeePlanDirty] = useState(false);
 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [staffName, setStaffName] = useState("");
   const [staffCode, setStaffCode] = useState("");
   const [staffRole, setStaffRole] = useState<"EMPLOYEE" | "INTERN">("EMPLOYEE");
-
-  const scheduleSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pointPlanSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const employeePlanSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
 
   const loadData = async (targetMonth: string) => {
     if (!session) return;
@@ -137,6 +131,9 @@ export default function DmPage() {
       }
 
       setData(json.data);
+      setScheduleDirty(false);
+      setPointPlanDirty(false);
+      setEmployeePlanDirty(false);
       setSelectedEmployeeId((prev) => {
         if (
           prev &&
@@ -170,86 +167,71 @@ export default function DmPage() {
     void loadData(monthStart);
   }, [session?.userId, monthStart]);
 
-  const saveScheduleSnapshot = (snapshot: DmResponse["data"]) => {
-    if (scheduleSaveTimer.current) {
-      clearTimeout(scheduleSaveTimer.current);
-    }
-
-    scheduleSaveTimer.current = setTimeout(async () => {
-      setSaving(true);
-      await fetch("/api/dm/schedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pointId: snapshot.point.id,
-          monthStart,
-          rows: snapshot.scheduleRows.flatMap((row) =>
-            row.days.map((day) => ({
-              employeeId: row.employeeId,
-              date: day.date,
-              hours: day.hours,
-            })),
-          ),
-        }),
-      });
-      setSaving(false);
-    }, 450);
+  const saveSchedule = async () => {
+    if (!data) return;
+    setSaving(true);
+    await fetch("/api/dm/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pointId: data.point.id,
+        monthStart,
+        rows: data.scheduleRows.flatMap((row) =>
+          row.days.map((day) => ({
+            employeeId: row.employeeId,
+            date: day.date,
+            hours: day.hours,
+          })),
+        ),
+      }),
+    });
+    setScheduleDirty(false);
+    setSaving(false);
   };
 
-  const savePointPlanSnapshot = (snapshot: DmResponse["data"]) => {
-    if (pointPlanSaveTimer.current) {
-      clearTimeout(pointPlanSaveTimer.current);
-    }
-
-    pointPlanSaveTimer.current = setTimeout(async () => {
-      setSaving(true);
-      await fetch("/api/dm/point-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pointId: snapshot.point.id,
-          monthStart,
-          items: snapshot.directionRows.map((row) => ({
-            directionId: row.directionId,
-            target: row.plan,
-          })),
-        }),
-      });
-      setSaving(false);
-    }, 450);
+  const savePointPlan = async () => {
+    if (!data) return;
+    setSaving(true);
+    await fetch("/api/dm/point-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pointId: data.point.id,
+        monthStart,
+        items: data.directionRows.map((row) => ({
+          directionId: row.directionId,
+          target: row.plan,
+        })),
+      }),
+    });
+    setPointPlanDirty(false);
+    setSaving(false);
   };
 
-  const saveEmployeePlanSnapshot = (
-    snapshot: DmResponse["data"],
-    employeeId: string,
-  ) => {
-    if (employeePlanSaveTimer.current) {
-      clearTimeout(employeePlanSaveTimer.current);
-    }
+  const saveEmployeePlan = async () => {
+    if (!data || !selectedEmployeeId) return;
+    const selected = data.employeePlans.find(
+      (plan) => plan.employeeId === selectedEmployeeId,
+    );
+    if (!selected) return;
 
-    employeePlanSaveTimer.current = setTimeout(async () => {
-      const selected = snapshot.employeePlans.find(
-        (plan) => plan.employeeId === employeeId,
-      );
-      if (!selected) return;
-
-      setSaving(true);
-      await fetch("/api/dm/employee-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pointId: snapshot.point.id,
-          employeeId,
-          monthStart,
-          items: selected.goals.map((goal) => ({
-            directionId: goal.directionId,
-            target: goal.target,
-            isPriority: goal.isPriority,
-          })),
-        }),
-      });
-      setSaving(false);
-    }, 450);
+    setSaving(true);
+    await fetch("/api/dm/employee-plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pointId: data.point.id,
+        employeeId: selectedEmployeeId,
+        monthStart,
+        items: selected.goals.map((goal) => ({
+          directionId: goal.directionId,
+          target: goal.target,
+          isPriority: goal.isPriority,
+        })),
+      }),
+    });
+    setEmployeePlanDirty(false);
+    setSaving(false);
   };
 
   const addStaff = async () => {
@@ -434,12 +416,22 @@ export default function DmPage() {
               <div>
                 <CardTitle>План-график месяца</CardTitle>
                 <CardDescription>
-                  Значения сохраняются автоматически сразу после ввода.
+                  После изменения нажмите «Сохранить в БД».
                 </CardDescription>
               </div>
-              <Button variant="outline" size="sm" onClick={exportSchedule}>
-                Экспорт CSV
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => void saveSchedule()}
+                  disabled={!scheduleDirty || saving}
+                >
+                  Сохранить в БД
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportSchedule}>
+                  Экспорт CSV
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="overflow-hidden rounded-xl border border-white/10">
@@ -535,8 +527,7 @@ export default function DmPage() {
                                         },
                                       ),
                                     };
-
-                                    saveScheduleSnapshot(nextSnapshot);
+                                    setScheduleDirty(true);
                                     return nextSnapshot;
                                   });
                                 }}
@@ -568,10 +559,19 @@ export default function DmPage() {
             <CardHeader>
               <CardTitle>План точки по направлениям</CardTitle>
               <CardDescription>
-                Сохранение происходит автоматически после изменения.
+                После изменения нажмите «Сохранить в БД».
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => void savePointPlan()}
+                  disabled={!pointPlanDirty || saving}
+                >
+                  Сохранить в БД
+                </Button>
+              </div>
               <div className="overflow-hidden rounded-xl border border-white/10">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[920px] text-base">
@@ -619,8 +619,7 @@ export default function DmPage() {
                                           : item,
                                     ),
                                   };
-
-                                  savePointPlanSnapshot(nextSnapshot);
+                                  setPointPlanDirty(true);
                                   return nextSnapshot;
                                 });
                               }}
@@ -650,26 +649,34 @@ export default function DmPage() {
               <div>
                 <CardTitle>Личный план сотрудника</CardTitle>
                 <CardDescription>
-                  Изменения целей и приоритетов сохраняются автоматически.
+                  Внесите правки и нажмите «Сохранить в БД».
                 </CardDescription>
               </div>
-              <Select
+              <NativeSelect
                 value={selectedEmployeeId}
-                onValueChange={setSelectedEmployeeId}
+                onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                className="w-[300px] border-white/10 bg-[#262626]"
               >
-                <SelectTrigger className="w-[300px] border-white/10 bg-[#262626]">
-                  <SelectValue placeholder="Выберите сотрудника" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data.employeePlans.map((plan) => (
-                    <SelectItem key={plan.employeeId} value={plan.employeeId}>
-                      {plan.employeeName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <NativeSelectOption value="" disabled>
+                  Выберите сотрудника
+                </NativeSelectOption>
+                {data.employeePlans.map((plan) => (
+                  <NativeSelectOption key={plan.employeeId} value={plan.employeeId}>
+                    {plan.employeeName}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => void saveEmployeePlan()}
+                  disabled={!employeePlanDirty || saving || !selectedPlan}
+                >
+                  Сохранить в БД
+                </Button>
+              </div>
               {!selectedPlan ? (
                 <p className="text-sm text-slate-400">
                   Выберите сотрудника для редактирования плана
@@ -712,11 +719,7 @@ export default function DmPage() {
                                   : plan,
                               ),
                             };
-
-                            saveEmployeePlanSnapshot(
-                              nextSnapshot,
-                              selectedPlan.employeeId,
-                            );
+                            setEmployeePlanDirty(true);
                             return nextSnapshot;
                           });
                         }}
@@ -745,11 +748,7 @@ export default function DmPage() {
                                     : plan,
                                 ),
                               };
-
-                              saveEmployeePlanSnapshot(
-                                nextSnapshot,
-                                selectedPlan.employeeId,
-                              );
+                              setEmployeePlanDirty(true);
                               return nextSnapshot;
                             });
                           }}
@@ -844,20 +843,18 @@ export default function DmPage() {
                 </div>
                 <div className="space-y-1">
                   <Label>Роль</Label>
-                  <Select
+                  <NativeSelect
                     value={staffRole}
-                    onValueChange={(value: "EMPLOYEE" | "INTERN") =>
-                      setStaffRole(value)
+                    onChange={(e) =>
+                      setStaffRole(e.target.value as "EMPLOYEE" | "INTERN")
                     }
+                    className="w-full border-white/10 bg-[#262626]"
                   >
-                    <SelectTrigger className="border-white/10 bg-[#262626]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="EMPLOYEE">Сотрудник</SelectItem>
-                      <SelectItem value="INTERN">Стажер</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <NativeSelectOption value="EMPLOYEE">
+                      Сотрудник
+                    </NativeSelectOption>
+                    <NativeSelectOption value="INTERN">Стажер</NativeSelectOption>
+                  </NativeSelect>
                 </div>
                 <Button className="w-full" onClick={addStaff} disabled={saving}>
                   <Settings2 className="mr-2 h-4 w-4" />
