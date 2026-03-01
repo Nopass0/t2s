@@ -103,6 +103,20 @@ export const deleteStaffSchema = z.object({
   id: z.string().min(1),
 });
 
+export const bulkEmployeeSalesSchema = z.object({
+  userId: z.string().min(1),
+  entries: z
+    .array(
+      z.object({
+        directionId: z.string().min(1),
+        date: z.string().date(),
+        quantity: z.number().int().min(0).nullable(),
+        amount: z.number().min(0).nullable(),
+      }),
+    )
+    .min(1),
+});
+
 export const bulkAddSalesSchema = z.object({
   pointId: z.string().min(1),
   saleDate: z.string().date(),

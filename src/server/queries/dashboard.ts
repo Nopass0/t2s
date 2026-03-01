@@ -261,6 +261,23 @@ export const getEmployeeDashboard = async (
     money: personalChartByDate.get(key)?.money ?? 0,
   }));
 
+  const personalDirDays = directions.map((direction) => {
+    const dayMap = new Map<string, number>();
+    for (const sale of personalSales) {
+      if (sale.directionId !== direction.id) continue;
+      const value =
+        sale.direction.unit === MetricUnit.PIECES
+          ? (sale.quantity ?? 0)
+          : (sale.amount ?? 0);
+      const key = toIsoDate(sale.saleDate);
+      dayMap.set(key, (dayMap.get(key) ?? 0) + value);
+    }
+    return {
+      directionId: direction.id,
+      days: dayKeys.map((key) => ({ date: key, value: dayMap.get(key) ?? 0 })),
+    };
+  });
+
   const creditDirection = directions.find((item) => item.key === "CREDIT");
   const creditAmount = creditDirection
     ? (personalFactByDirectionId.get(creditDirection.id) ?? 0)
@@ -300,6 +317,7 @@ export const getEmployeeDashboard = async (
     dayColumns: dayKeys,
     directionRows,
     personalRows,
+    personalDirDays,
     dailyChart,
   };
 };
