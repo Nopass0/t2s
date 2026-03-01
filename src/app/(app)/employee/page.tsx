@@ -217,6 +217,10 @@ export default function EmployeePage() {
   }, [session?.userId, monthStart]);
 
   useEffect(() => {
+    setEntryValues({});
+  }, [monthStart]);
+
+  useEffect(() => {
     if (!data || statsDirectionId) {
       return;
     }
