@@ -11,6 +11,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   LoaderCircle,
+  PenLine,
   PlusCircle,
   ReceiptText,
   ScrollText,
@@ -107,6 +108,10 @@ type EmployeeDashboardResponse = {
       progress: number;
       isPriority: boolean;
     }>;
+    personalDirDays: Array<{
+      directionId: string;
+      days: Array<{ date: string; value: number }>;
+    }>;
     dailyChart: Array<{ date: string; pieces: number; money: number }>;
   };
   error?: string;
@@ -117,7 +122,8 @@ type EmployeeTab =
   | "schedule"
   | "point-plan"
   | "personal"
-  | "stats";
+  | "stats"
+  | "entry";
 
 const weekDays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
@@ -149,6 +155,11 @@ export default function EmployeePage() {
   const [amount, setAmount] = useState("0");
   const [savingSale, setSavingSale] = useState(false);
 
+  const [entryValues, setEntryValues] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [savingEntry, setSavingEntry] = useState(false);
+
   const [statsDirectionId, setStatsDirectionId] = useState("");
   const [savingShiftDate, setSavingShiftDate] = useState("");
   const [copyingPlanScreenshot, setCopyingPlanScreenshot] = useState(false);
@@ -156,6 +167,8 @@ export default function EmployeePage() {
   const pointPlanScrollerRef = useRef<HTMLDivElement | null>(null);
   const pointPlanCaptureRef = useRef<HTMLDivElement | null>(null);
   const todayPlanHeaderRef = useRef<HTMLTableCellElement | null>(null);
+  const entryScrollerRef = useRef<HTMLDivElement | null>(null);
+  const todayEntryHeaderRef = useRef<HTMLTableCellElement | null>(null);
 
   const loadData = async (targetMonth: string) => {
     if (!session) {
@@ -232,6 +245,21 @@ export default function EmployeePage() {
     scroller.scrollTo({ left: targetLeft, behavior: "smooth" });
   }, [tab, data?.dayColumns]);
 
+  useEffect(() => {
+    if (tab !== "entry") {
+      return;
+    }
+
+    const scroller = entryScrollerRef.current;
+    const todayCell = todayEntryHeaderRef.current;
+    if (!scroller || !todayCell) {
+      return;
+    }
+
+    const targetLeft = Math.max(0, todayCell.offsetLeft - 260);
+    scroller.scrollTo({ left: targetLeft, behavior: "smooth" });
+  }, [tab, data?.dayColumns]);
+
   const selectedDirection = useMemo(
     () => data?.directionRows.find((row) => row.directionId === directionId),
     [data?.directionRows, directionId],
@@ -258,6 +286,15 @@ export default function EmployeePage() {
   const shiftByDate = useMemo(() => {
     return new Map((data?.shiftCells ?? []).map((item) => [item.date, item]));
   }, [data?.shiftCells]);
+
+  const personalDirDayMap = useMemo(() => {
+    const outer = new Map<string, Map<string, number>>();
+    for (const row of data?.personalDirDays ?? []) {
+      const inner = new Map(row.days.map((d) => [d.date, d.value]));
+      outer.set(row.directionId, inner);
+    }
+    return outer;
+  }, [data?.personalDirDays]);
 
   const calendarGrid = useMemo(() => {
     if (!data?.dayColumns.length) {
@@ -483,6 +520,55 @@ export default function EmployeePage() {
     setSavingSale(false);
   };
 
+  const submitBulkEntry = async () => {
+    if (!session || !data) return;
+
+    const entries: Array<{
+      directionId: string;
+      date: string;
+      quantity: number | null;
+      amount: number | null;
+    }> = [];
+
+    for (const row of data.directionRows) {
+      const dayValues = entryValues[row.directionId] ?? {};
+      for (const [date, rawValue] of Object.entries(dayValues)) {
+        const value = Number(rawValue) || 0;
+        if (value <= 0) continue;
+        entries.push({
+          directionId: row.directionId,
+          date,
+          quantity: row.unit === "PIECES" ? value : null,
+          amount: row.unit === "MONEY" ? value : null,
+        });
+      }
+    }
+
+    if (entries.length === 0) return;
+
+    setSavingEntry(true);
+    setError("");
+    try {
+      const res = await fetch("/api/employee/sales/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: session.userId, entries }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? "Не удалось сохранить продажи");
+      }
+      setEntryValues({});
+      await loadData(monthStart);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Не удалось сохранить продажи",
+      );
+    } finally {
+      setSavingEntry(false);
+    }
+  };
+
   const exportPointPlan = () => {
     if (!data) return;
 
@@ -628,6 +714,13 @@ export default function EmployeePage() {
           icon: <BarChart3 className="h-4 w-4" />,
           onClick: () => setTab("stats"),
           active: tab === "stats",
+        },
+        {
+          id: "entry",
+          label: "Ввод продаж",
+          icon: <PenLine className="h-4 w-4" />,
+          onClick: () => setTab("entry"),
+          active: tab === "entry",
         },
         {
           id: "motivation",
@@ -1220,6 +1313,129 @@ export default function EmployeePage() {
                   />
                 </BarChart>
               </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="entry">
+          <Card className="rounded-lg bg-[#1c1c1c]">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Ввод продаж за месяц</CardTitle>
+                <CardDescription>
+                  Заполните ячейки — цифры прибавятся к уже внесённым. Нажмите
+                  «Сохранить», чтобы зафиксировать.
+                </CardDescription>
+              </div>
+              <Button
+                size="sm"
+                disabled={savingEntry}
+                onClick={() => void submitBulkEntry()}
+              >
+                {savingEntry ? (
+                  <>
+                    <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                    Сохраняю…
+                  </>
+                ) : (
+                  "Сохранить"
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-xl border border-white/10">
+                <div
+                  ref={entryScrollerRef}
+                  className="app-scrollbar overflow-x-auto pb-2"
+                  onWheel={handleHorizontalWheel}
+                >
+                  <table className="w-full min-w-max text-sm">
+                    <thead>
+                      <tr className="bg-[#2a2a2a]">
+                        <th className="sticky left-0 z-30 min-w-[200px] bg-[#2a2a2a] p-3 text-left text-base">
+                          Направление
+                        </th>
+                        {data.dayColumns.map((day) => (
+                          <th
+                            key={day}
+                            ref={day === todayIso ? todayEntryHeaderRef : null}
+                            className={`min-w-[100px] p-2 text-center text-sm font-normal ${
+                              day === todayIso ? "bg-primary/15" : ""
+                            }`}
+                          >
+                            <div className="font-semibold">
+                              {dayLabel(day)}
+                            </div>
+                            <div className="text-xs text-slate-400">
+                              {fromIsoDate(day).toLocaleDateString("ru-RU", {
+                                weekday: "short",
+                              })}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.directionRows.map((row, rowIndex) => {
+                        const dayFacts = personalDirDayMap.get(row.directionId);
+                        const bgClass =
+                          rowIndex % 2 === 0 ? "bg-[#232323]" : "bg-[#1f1f1f]";
+                        return (
+                          <tr key={row.directionId} className={bgClass}>
+                            <td
+                              className={`sticky left-0 z-20 p-3 font-medium ${bgClass}`}
+                            >
+                              <p>{row.title}</p>
+                              <p className="text-xs text-slate-400">
+                                {row.unit === "PIECES" ? "шт." : "руб."}
+                              </p>
+                            </td>
+                            {data.dayColumns.map((day) => {
+                              const existing = dayFacts?.get(day) ?? 0;
+                              return (
+                                <td
+                                  key={day}
+                                  className={`p-1.5 ${
+                                    day === todayIso ? "bg-primary/10" : ""
+                                  }`}
+                                >
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step={row.unit === "MONEY" ? "0.01" : "1"}
+                                    placeholder="0"
+                                    value={
+                                      entryValues[row.directionId]?.[day] ?? ""
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setEntryValues((prev) => ({
+                                        ...prev,
+                                        [row.directionId]: {
+                                          ...(prev[row.directionId] ?? {}),
+                                          [day]: val,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-8 rounded-md border-white/10 bg-[#262626] text-center text-sm"
+                                  />
+                                  {existing > 0 ? (
+                                    <p className="mt-0.5 text-center text-[11px] text-slate-500">
+                                      {Math.round(existing).toLocaleString(
+                                        "ru-RU",
+                                      )}
+                                    </p>
+                                  ) : null}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
