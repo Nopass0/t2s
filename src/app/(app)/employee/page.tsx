@@ -230,6 +230,25 @@ export default function EmployeePage() {
     setDirectionId(data.directionRows[0]?.directionId ?? "");
   }, [data, directionId]);
 
+  // Pre-fill entry inputs with existing daily sales values
+  useEffect(() => {
+    if (!data) return;
+    const unitByDirId = new Map(
+      data.directionRows.map((r) => [r.directionId, r.unit]),
+    );
+    const init: Record<string, Record<string, string>> = {};
+    for (const row of data.personalDirDays) {
+      for (const day of row.days) {
+        if (day.value <= 0) continue;
+        if (!init[row.directionId]) init[row.directionId] = {};
+        const unit = unitByDirId.get(row.directionId);
+        init[row.directionId]![day.date] =
+          unit === "MONEY" ? String(day.value) : String(Math.round(day.value));
+      }
+    }
+    setEntryValues(init);
+  }, [data]);
+
   useEffect(() => {
     if (tab !== "point-plan") {
       return;
@@ -287,14 +306,6 @@ export default function EmployeePage() {
     return new Map((data?.shiftCells ?? []).map((item) => [item.date, item]));
   }, [data?.shiftCells]);
 
-  const personalDirDayMap = useMemo(() => {
-    const outer = new Map<string, Map<string, number>>();
-    for (const row of data?.personalDirDays ?? []) {
-      const inner = new Map(row.days.map((d) => [d.date, d.value]));
-      outer.set(row.directionId, inner);
-    }
-    return outer;
-  }, [data?.personalDirDays]);
 
   const calendarGrid = useMemo(() => {
     if (!data?.dayColumns.length) {
@@ -534,7 +545,6 @@ export default function EmployeePage() {
       const dayValues = entryValues[row.directionId] ?? {};
       for (const [date, rawValue] of Object.entries(dayValues)) {
         const value = Number(rawValue) || 0;
-        if (value <= 0) continue;
         entries.push({
           directionId: row.directionId,
           date,
@@ -550,7 +560,7 @@ export default function EmployeePage() {
     setError("");
     try {
       const res = await fetch("/api/employee/sales/bulk", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: session.userId, entries }),
       });
@@ -558,7 +568,6 @@ export default function EmployeePage() {
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? "Не удалось сохранить продажи");
       }
-      setEntryValues({});
       await loadData(monthStart);
     } catch (err) {
       setError(
@@ -1323,8 +1332,9 @@ export default function EmployeePage() {
               <div>
                 <CardTitle>Ввод продаж за месяц</CardTitle>
                 <CardDescription>
-                  Заполните ячейки — цифры прибавятся к уже внесённым. Нажмите
-                  «Сохранить», чтобы зафиксировать.
+                  Уже внесённые значения отображаются в полях. Редактируйте
+                  цифры и нажмите «Сохранить» — данные за изменённые дни
+                  заменятся.
                 </CardDescription>
               </div>
               <Button
@@ -1377,7 +1387,6 @@ export default function EmployeePage() {
                     </thead>
                     <tbody>
                       {data.directionRows.map((row, rowIndex) => {
-                        const dayFacts = personalDirDayMap.get(row.directionId);
                         const bgClass =
                           rowIndex % 2 === 0 ? "bg-[#232323]" : "bg-[#1f1f1f]";
                         return (
@@ -1391,7 +1400,6 @@ export default function EmployeePage() {
                               </p>
                             </td>
                             {data.dayColumns.map((day) => {
-                              const existing = dayFacts?.get(day) ?? 0;
                               return (
                                 <td
                                   key={day}
@@ -1419,13 +1427,6 @@ export default function EmployeePage() {
                                     }}
                                     className="h-8 rounded-md border-white/10 bg-[#262626] text-center text-sm"
                                   />
-                                  {existing > 0 ? (
-                                    <p className="mt-0.5 text-center text-[11px] text-slate-500">
-                                      {Math.round(existing).toLocaleString(
-                                        "ru-RU",
-                                      )}
-                                    </p>
-                                  ) : null}
                                 </td>
                               );
                             })}
