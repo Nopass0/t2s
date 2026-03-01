@@ -102,3 +102,18 @@ export const updateStaffSchema = z.object({
 export const deleteStaffSchema = z.object({
   id: z.string().min(1),
 });
+
+export const bulkAddSalesSchema = z.object({
+  pointId: z.string().min(1),
+  saleDate: z.string().date(),
+  entries: z
+    .array(
+      z.object({
+        userId: z.string().min(1),
+        directionId: z.string().min(1),
+        quantity: z.number().int().min(0).nullable(),
+        amount: z.number().min(0).nullable(),
+      }),
+    )
+    .min(1),
+});

@@ -9,6 +9,7 @@ import {
   ScrollText,
   Settings2,
   SquarePen,
+  TrendingUp,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -61,6 +62,8 @@ type DmResponse = {
     directions: Array<{
       id: string;
       title: string;
+      unit: "PIECES" | "MONEY";
+      key: string;
     }>;
     employeePlans: Array<{
       employeeId: string;
@@ -87,7 +90,7 @@ type DmResponse = {
   };
 };
 
-type DmTab = "schedule" | "point-plan" | "employee-plan" | "team";
+type DmTab = "schedule" | "point-plan" | "employee-plan" | "team" | "sales";
 
 const weekShort = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
 
@@ -114,6 +117,12 @@ export default function DmPage() {
   const [staffName, setStaffName] = useState("");
   const [staffCode, setStaffCode] = useState("");
   const [staffRole, setStaffRole] = useState<"EMPLOYEE" | "INTERN">("EMPLOYEE");
+
+  const [salesDate, setSalesDate] = useState(toIsoDate(new Date()));
+  const [salesValues, setSalesValues] = useState<
+    Record<string, Record<string, string>>
+  >({});
+  const [savingSales, setSavingSales] = useState(false);
 
   const loadData = async (targetMonth: string) => {
     if (!session) return;
@@ -297,6 +306,62 @@ export default function DmPage() {
     setSaving(false);
   };
 
+  const saveBulkSales = async () => {
+    if (!data) return;
+
+    const entries: Array<{
+      userId: string;
+      directionId: string;
+      quantity: number | null;
+      amount: number | null;
+    }> = [];
+
+    for (const person of data.people) {
+      for (const direction of data.directions) {
+        const raw = salesValues[person.id]?.[direction.id] ?? "";
+        const value = Number(raw) || 0;
+        if (value <= 0) continue;
+
+        entries.push({
+          userId: person.id,
+          directionId: direction.id,
+          quantity: direction.unit === "PIECES" ? value : null,
+          amount: direction.unit === "MONEY" ? value : null,
+        });
+      }
+    }
+
+    if (entries.length === 0) return;
+
+    setSavingSales(true);
+    setError("");
+    try {
+      const res = await fetch("/api/dm/sales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pointId: data.point.id,
+          saleDate: salesDate,
+          entries,
+        }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error ?? "Не удалось сохранить продажи");
+      }
+
+      setSalesValues({});
+      await loadData(monthStart);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Не удалось сохранить продажи",
+      );
+    } finally {
+      setSavingSales(false);
+    }
+  };
+
   const toggleActive = async (id: string, nextValue: boolean) => {
     if (!data) return;
     const staff = data.people.find((person) => person.id === id);
@@ -442,6 +507,13 @@ export default function DmPage() {
           icon: <Users className="h-4 w-4" />,
           onClick: () => setTab("team"),
           active: tab === "team",
+        },
+        {
+          id: "sales",
+          label: "Продажи",
+          icon: <TrendingUp className="h-4 w-4" />,
+          onClick: () => setTab("sales"),
+          active: tab === "sales",
         },
         {
           id: "motivation",
@@ -910,6 +982,114 @@ export default function DmPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="sales">
+          <Card className="rounded-lg bg-[#1c1c1c]">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Добавить продажи</CardTitle>
+                <CardDescription>
+                  Введите значения по сотрудникам и направлениям, затем
+                  нажмите «Добавить».
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  value={salesDate}
+                  onChange={(e) => setSalesDate(e.target.value)}
+                  className="h-9 rounded-md border border-white/10 bg-[#262626] px-3 text-sm text-slate-200 focus:outline-none"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => void saveBulkSales()}
+                  disabled={savingSales}
+                >
+                  {savingSales ? "Сохраняю…" : "Добавить"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-hidden rounded-xl border border-white/10">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-max text-sm">
+                    <thead>
+                      <tr className="bg-[#2a2a2a]">
+                        <th className="sticky left-0 z-20 min-w-[200px] bg-[#2a2a2a] p-3 text-left text-base">
+                          Сотрудник
+                        </th>
+                        {data.directions.map((dir) => (
+                          <th
+                            key={dir.id}
+                            className="min-w-[120px] p-3 text-center"
+                          >
+                            <p className="font-semibold">{dir.title}</p>
+                            <p className="text-xs font-normal text-slate-400">
+                              {dir.unit === "PIECES" ? "шт." : "руб."}
+                            </p>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.people.map((person) => {
+                        const planRow = data.employeePlans.find(
+                          (p) => p.employeeId === person.id,
+                        );
+                        return (
+                          <tr
+                            key={person.id}
+                            className="odd:bg-[#232323] even:bg-[#1f1f1f]"
+                          >
+                            <td className="sticky left-0 z-10 bg-[#232323] p-3">
+                              <p className="font-semibold">{person.name}</p>
+                              <p className="text-xs text-slate-400 uppercase">
+                                {roleLabel[person.role as SessionRole]}
+                              </p>
+                            </td>
+                            {data.directions.map((dir) => {
+                              const fact =
+                                planRow?.goals.find(
+                                  (g) => g.directionId === dir.id,
+                                )?.fact ?? 0;
+                              return (
+                                <td key={dir.id} className="p-2">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    placeholder="0"
+                                    value={
+                                      salesValues[person.id]?.[dir.id] ?? ""
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setSalesValues((prev) => ({
+                                        ...prev,
+                                        [person.id]: {
+                                          ...(prev[person.id] ?? {}),
+                                          [dir.id]: val,
+                                        },
+                                      }));
+                                    }}
+                                    className="h-9 rounded-md border-white/10 bg-[#262626] text-center"
+                                  />
+                                  <p className="mt-1 text-center text-xs text-slate-500">
+                                    Факт:{" "}
+                                    {Math.round(fact).toLocaleString("ru-RU")}
+                                  </p>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </AppShell>
