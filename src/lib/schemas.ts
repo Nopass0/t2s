@@ -117,6 +117,11 @@ export const bulkEmployeeSalesSchema = z.object({
     .min(1),
 });
 
+export const distributeEmployeePlansSchema = z.object({
+  pointId: z.string().min(1),
+  monthStart: z.string().date(),
+});
+
 export const bulkAddSalesSchema = z.object({
   pointId: z.string().min(1),
   saleDate: z.string().date(),
