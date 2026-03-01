@@ -8,6 +8,7 @@ import {
   ClipboardPen,
   ScrollText,
   Settings2,
+  Shuffle,
   SquarePen,
   TrendingUp,
   UserPlus,
@@ -109,6 +110,7 @@ export default function DmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [distributing, setDistributing] = useState(false);
   const [scheduleDirty, setScheduleDirty] = useState(false);
   const [pointPlanDirty, setPointPlanDirty] = useState(false);
   const [employeePlanDirty, setEmployeePlanDirty] = useState(false);
@@ -282,6 +284,36 @@ export default function DmPage() {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const distributePlans = async () => {
+    if (!data) return;
+
+    setDistributing(true);
+    setError("");
+    try {
+      const res = await fetch("/api/dm/distribute-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pointId: data.point.id,
+          monthStart,
+        }),
+      });
+
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error ?? "Не удалось распределить планы");
+      }
+
+      await loadData(monthStart);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Не удалось распределить планы",
+      );
+    } finally {
+      setDistributing(false);
     }
   };
 
@@ -764,27 +796,39 @@ export default function DmPage() {
 
         <TabsContent value="employee-plan">
           <Card className="rounded-lg bg-[#1c1c1c]">
-            <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
               <div>
                 <CardTitle>Личный план сотрудника</CardTitle>
                 <CardDescription>
                   Внесите правки и нажмите «Сохранить в БД».
                 </CardDescription>
               </div>
-              <NativeSelect
-                value={selectedEmployeeId}
-                onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                className="w-[300px] border-white/10 bg-[#262626]"
-              >
-                <NativeSelectOption value="" disabled>
-                  Выберите сотрудника
-                </NativeSelectOption>
-                {data.employeePlans.map((plan) => (
-                  <NativeSelectOption key={plan.employeeId} value={plan.employeeId}>
-                    {plan.employeeName}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void distributePlans()}
+                  disabled={distributing || saving}
+                  title="Равномерно распределить план точки между всеми сотрудниками (округление в большую сторону)"
+                >
+                  <Shuffle className="mr-2 h-4 w-4" />
+                  {distributing ? "Распределяю…" : "Распределить автоматически"}
+                </Button>
+                <NativeSelect
+                  value={selectedEmployeeId}
+                  onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                  className="w-[240px] border-white/10 bg-[#262626]"
+                >
+                  <NativeSelectOption value="" disabled>
+                    Выберите сотрудника
                   </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                  {data.employeePlans.map((plan) => (
+                    <NativeSelectOption key={plan.employeeId} value={plan.employeeId}>
+                      {plan.employeeName}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="mb-3 flex justify-end">
